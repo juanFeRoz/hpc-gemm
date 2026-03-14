@@ -4,7 +4,7 @@ LDFLAGS 	= -fopenmp -lopenblas
 
 TARGET 		= gemm
 
-SRCS 			= main.cpp Kernels.cpp
+SRCS 			= main.cpp 
 OBJS 			= $(SRCS:.cpp=.o)
 HDRS 			= Matrix.hpp Kernels.hpp
 

@@ -34,7 +34,8 @@ int main() {
   B.fillRandom();
 
   auto start{std::chrono::high_resolution_clock::now()};
-  matMulBLAS(A, B, C);
+  Kernels::matMulParallel<64>(A, B, C);
+  // matMulBLAS(A, B, C);
   auto end{std::chrono::high_resolution_clock::now()};
 
   std::chrono::duration<double> diff{end - start};

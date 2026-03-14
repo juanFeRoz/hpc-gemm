@@ -2,34 +2,41 @@
 #define KERNELS_HPP
 
 #include "Matrix.hpp"
-#include <immintrin.h>
+#include <omp.h>
 
 namespace Kernels {
-template <int Nr, int Mr, int Kc>
-inline void gemmKernel(const double *__restrict a, const double *__restrict b,
-                       double *__restrict c, int N) {
-  double carr[Nr * Mr] = {0.0};
-
-  // Array local para registros (el compilador intentará poner esto en registros
-  // AVX)
-  for (int k{0}; k < Kc; ++k, b += Nr, a += Mr) {
-    for (int i{0}; i < Mr; ++i) {
-      for (int j{0}; j < Nr; ++j) {
-        carr[i * Nr + j] += a[i] * b[j];
+template <int BLOCK>
+inline void gemmKernel(const double *a, const double *mb, double *c, int N,
+                       int K) {
+  for (int i = 0; i < BLOCK; ++i, c += N, a += K) {
+    const double *b = mb;
+    for (int k = 0; k < BLOCK; ++k, b += N) {
+      for (int j = 0; j < BLOCK; ++j) {
+        c[j] += a[k] * b[j];
       }
     }
   }
+}
+template <int BLOCK>
+inline void matMulParallel(const Matrix<double> &A, const Matrix<double> &B,
+                           Matrix<double> &C) {
+  const int M = static_cast<int>(A.row());
+  const int K = static_cast<int>(A.col());
+  const int N = static_cast<int>(B.col());
 
-  // Volcar el acumulador temporal a la matriz C original
-  for (int i{0}; i < Mr; ++i) {
-    for (int j{0}; j < Nr; ++j) {
-      c[i * N + j] += carr[i * Nr + j];
+#pragma omp parallel for
+  for (int ib = 0; ib < M; ib += BLOCK) {
+    for (int kb = 0; kb < K; kb += BLOCK) {
+      for (int jb = 0; jb < N; jb += BLOCK) {
+        const double *a = &A(ib, kb);
+        const double *mb = &B(kb, jb);
+        double *c = &C(ib, jb);
+
+        gemmKernel<BLOCK>(a, mb, c, N, K);
+      }
     }
   }
 }
-void matMulParallel(const Matrix<double> &A, const Matrix<double> &B,
-                    Matrix<double> &C);
-
 } // namespace Kernels
 
 #endif
