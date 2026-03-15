@@ -25,7 +25,7 @@ int main() {
   cudaMemcpy(dA, A.data(), size, cudaMemcpyHostToDevice);
   cudaMemcpy(dB, B.data(), size, cudaMemcpyHostToDevice);
 
-  dim3 dimBlock(64, 64);
+  dim3 dimBlock(32, 32);
   dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x,
                (N + dimBlock.y - 1) / dimBlock.y);
 
@@ -41,7 +41,7 @@ int main() {
 
   cudaEventSynchronize(end);
 
-  double milliseconds = 0;
+  float milliseconds = 0;
   cudaEventElapsedTime(&milliseconds, start, end);
   double seconds = milliseconds / 1000.0;
   double gflops = (2.0 * N * N * N) / (seconds * 1e9);

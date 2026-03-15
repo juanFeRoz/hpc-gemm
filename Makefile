@@ -1,15 +1,13 @@
 NVCC      := nvcc
-NVCCFLAGS := -O3 -Xcompiler -Wall
+NVCCFLAGS := -O3 -Xcompiler -Wall -std=c++17
 
-GPU_ARCH := $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader,nounits 2>/dev/null | head -n 1 | tr -d '.')
-ifeq ($(GPU_ARCH),)
-    GPU_ARCH := 80
-endif
+GPU_ARCH := 52
+
 ARCH := -gencode arch=compute_$(GPU_ARCH),code=sm_$(GPU_ARCH)
 
 TARGET  := sgemm_naive
 SRC     := main.cu
-HEADERS := kernels.cuh
+HEADERS := Kernels.cuh
 OBJ     := main.o
 
 all: $(TARGET)
@@ -21,6 +19,6 @@ $(OBJ): $(SRC) $(HEADERS)
 	$(NVCC) $(NVCCFLAGS) $(ARCH) -c $(SRC) -o $(OBJ)
 
 clean:
-	rm -f $(TARGET) $(OBJ) run_gemm.sh
+	rm -f $(TARGET) $(OBJ) 
 
 .PHONY: all clean
