@@ -1,22 +1,26 @@
-CXX 			= clang++
-CXXFLAGS 	= -O3 -march=native -fopenmp -ffast-math -Wall -Wextra -Werror
-LDFLAGS 	= -fopenmp -lopenblas
+NVCC      := nvcc
+NVCCFLAGS := -O3 -Xcompiler -Wall
 
-TARGET 		= gemm
+GPU_ARCH := $(shell nvidia-smi --query-gpu=compute_cap --format=csv,noheader,nounits 2>/dev/null | head -n 1 | tr -d '.')
+ifeq ($(GPU_ARCH),)
+    GPU_ARCH := 80
+endif
+ARCH := -gencode arch=compute_$(GPU_ARCH),code=sm_$(GPU_ARCH)
 
-SRCS 			= main.cpp 
-OBJS 			= $(SRCS:.cpp=.o)
-HDRS 			= Matrix.hpp Kernels.hpp
+TARGET  := sgemm_naive
+SRC     := main.cu
+HEADERS := kernels.cuh
+OBJ     := main.o
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	$(CXX) $(OBJS) -o $(TARGET) $(LDFLAGS)
+$(TARGET): $(OBJ)
+	$(NVCC) $(NVCCFLAGS) $(ARCH) $(OBJ) -o $(TARGET)
 
-%.o: %.cpp $(HDRS)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+$(OBJ): $(SRC) $(HEADERS)
+	$(NVCC) $(NVCCFLAGS) $(ARCH) -c $(SRC) -o $(OBJ)
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(TARGET) $(OBJ) run_gemm.sh
 
 .PHONY: all clean
