@@ -1,6 +1,6 @@
-CXX 			= clang++
+CXX 			= g++
 CXXFLAGS 	= -O3 -march=native -fopenmp -ffast-math -Wall -Wextra -Werror
-LDFLAGS 	= -fopenmp -lopenblas
+LDFLAGS 	= -fopenmp
 
 TARGET 		= gemm
 
