@@ -1,6 +1,5 @@
 #include "Kernels.hpp"
 #include "Matrix.hpp"
-#include <cblas.h>
 #include <chrono>
 #include <cstddef>
 #include <iostream>
