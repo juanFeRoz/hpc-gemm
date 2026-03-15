@@ -36,7 +36,7 @@ int main() {
   cudaEventCreate(&end);
 
   cudaEventRecord(start);
-  Kernels::dgemm_naive<<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
+  Kernels::dgemm<<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
   cudaEventRecord(end);
 
   cudaEventSynchronize(end);

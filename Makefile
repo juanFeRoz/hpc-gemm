@@ -5,7 +5,7 @@ GPU_ARCH := 52
 
 ARCH := -gencode arch=compute_$(GPU_ARCH),code=sm_$(GPU_ARCH)
 
-TARGET  := sgemm_naive
+TARGET  := dgemm
 SRC     := main.cu
 HEADERS := Kernels.cuh
 OBJ     := main.o

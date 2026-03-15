@@ -3,8 +3,8 @@
 
 #include <cuda_runtime.h>
 namespace Kernels {
-inline __global__ void dgemm_naive(int M, int N, int K, const double *A,
-                                   const double *B, double *C) {
+inline __global__ void dgemm(int M, int N, int K, const double *A,
+                             const double *B, double *C) {
   int col = blockIdx.x * blockDim.x + threadIdx.x;
   int row = blockIdx.y * blockDim.y + threadIdx.y;
 
