@@ -4,25 +4,6 @@
 #include <cstddef>
 #include <iostream>
 
-void matMulBLAS(const Matrix<double> &A, const Matrix<double> &B,
-                Matrix<double> &C) {
-  const int M{static_cast<int>(A.row())};
-  const int K{static_cast<int>(A.col())};
-  const int N{static_cast<int>(B.col())};
-
-  // dgemm: Double precision General Matrix Multiply
-  cblas_dgemm(CblasRowMajor, // Layout
-              CblasNoTrans,  // Transpose A?
-              CblasNoTrans,  // Transpose B?
-              M, N, K,       // Dimensions
-              1.0,           // Alpha (scalar to multiply A*B)
-              A.data(), K,   // Matrix A and its leading dimension (LDA)
-              B.data(), N,   // Matrix B and its leading dimension (LDB)
-              0.0,           // Beta (scalar to multiply C before adding)
-              C.data(), N    // Matrix C and its leading dimension (LDC)
-  );
-}
-
 int main() {
   size_t N = 2880;
   Matrix<double> A(N, N);
@@ -34,7 +15,6 @@ int main() {
 
   auto start{std::chrono::high_resolution_clock::now()};
   Kernels::matMulParallel<64>(A, B, C);
-  // matMulBLAS(A, B, C);
   auto end{std::chrono::high_resolution_clock::now()};
 
   std::chrono::duration<double> diff{end - start};
