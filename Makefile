@@ -1,5 +1,5 @@
 NVCC      := nvcc
-NVCCFLAGS := -O3 -Xcompiler -Wall 
+NVCCFLAGS := -O3 -Xcompiler -Wall -std=c++11
 
 GPU_ARCH := 20
 
