@@ -3,12 +3,18 @@
 
 int main() {
   sycl::queue q;
-  std::cout << "Running on "
-            << q.get_device().get_info<sycl::info::device::name>() << "\n";
-  q.submit([&](sycl::handler &cg) {
-    auto os = sycl::stream{1024, 1024, cg};
-    cg.parallel_for(10, [=](sycl::id<1> myid) {
-      os << "Hello World! My ID is " << myid << "\n";
-    });
-  });
+
+  auto dev = q.get_device();
+
+  std::cout << "========================================" << std::endl;
+  std::cout << "SYCL Device Info:" << std::endl;
+  std::cout << "Name:     " << dev.get_info<sycl::info::device::name>()
+            << std::endl;
+  std::cout << "Vendor:   " << dev.get_info<sycl::info::device::vendor>()
+            << std::endl;
+  std::cout << "Driver:   "
+            << dev.get_info<sycl::info::device::driver_version>() << std::endl;
+  std::cout << "========================================" << std::endl;
+
+  return 0;
 }
