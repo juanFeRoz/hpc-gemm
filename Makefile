@@ -1,7 +1,7 @@
 NVCC      := nvcc
-NVCCFLAGS := -O3 -Xcompiler -Wall -std=c++17
+NVCCFLAGS := -O3 -Xcompiler -Wall 
 
-GPU_ARCH := 52
+GPU_ARCH := 20
 
 ARCH := -gencode arch=compute_$(GPU_ARCH),code=sm_$(GPU_ARCH)
 
