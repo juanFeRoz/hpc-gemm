@@ -1,30 +1,22 @@
 #!/bin/bash
-#SBATCH --job-name=cuda_fermi_bench    # Nombre del trabajo
-#SBATCH --partition=legacy             # Partición obligatoria para GPUs antiguas
-#SBATCH --nodes=1                      # Usar un solo nodo
-#SBATCH --ntasks-per-node=1            # Una tarea por nodo
-#SBATCH --gres=gpu:1                   # Solicitar 1 GPU
-#SBATCH --output=resultado_%j.log      # Archivo de salida (%j es el ID del trabajo)
-#SBATCH --error=error_%j.err           # Archivo de errores
+#SBATCH --job-name=cuda_make_bench
+#SBATCH --partition=legacy
+#SBATCH --nodes=1
+#SBATCH --gres=gpu:1
+#SBATCH --output=make_output_%j.log
 
-module load apptainer
-
+module load apptainer/1.3.6
 CONTAINER="$HOME/containers/cuda8.sif"
-SOURCE="hello.cu"
-EXE="hello"
 
-echo "Iniciando trabajo en el nodo: $SLURM_NODELIST"
-echo "Fecha: $(date)"
+apptainer exec --nv $CONTAINER make clean
+apptainer exec --nv $CONTAINER make
 
-echo "--- Compilando para Fermi (sm_20) ---"
-apptainer exec --nv $CONTAINER nvcc -arch=sm_20 $SOURCE -o $EXE
+EXE="./dgemm"
 
-if [ $? -ne 0 ]; then
-    echo "Error en la compilación. Abortando."
+if [ -f "$EXE" ]; then
+    echo "--- Ejecutando Profiling de $EXE ---"
+    apptainer exec --nv $CONTAINER nvprof $EXE
+else
+    echo "Error: El ejecutable $EXE no fue encontrado. Revisa el log de compilación."
     exit 1
 fi
-
-echo "--- Ejecutando Benchmark con nvprof ---"
-apptainer exec --nv $CONTAINER nvprof ./$EXE
-
-echo "Trabajo finalizado con éxito."
