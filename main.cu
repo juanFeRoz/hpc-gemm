@@ -36,6 +36,13 @@ int main(int argc, char *argv[]) {
                (N + dimBlock.y - 1) / dimBlock.y);
 
   Kernels::dgemm_naive<<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
+  cudaDeviceSynchronize();
+
+  const int iterations = 10;
+  for (int i = 0; i < iterations; ++i) {
+    Kernels::dgemm_naive<<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
+  }
+  cudaDeviceSynchronize();
 
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
