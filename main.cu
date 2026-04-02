@@ -5,18 +5,18 @@
 
 int main() {
   const size_t N = 2880;
-  Matrix<double> A(N, N);
-  Matrix<double> B(N, N);
-  Matrix<double> C(N, N);
+  Matrix<float> A(N, N);
+  Matrix<float> B(N, N);
+  Matrix<float> C(N, N);
 
   A.fillRandom();
   B.fillRandom();
 
-  double *dA;
-  double *dB;
-  double *dC;
+  float *dA;
+  float *dB;
+  float *dC;
 
-  size_t size = N * N * sizeof(double);
+  size_t size = N * N * sizeof(float);
 
   cudaMalloc(&dA, size);
   cudaMalloc(&dB, size);
@@ -25,7 +25,8 @@ int main() {
   cudaMemcpy(dA, A.data(), size, cudaMemcpyHostToDevice);
   cudaMemcpy(dB, B.data(), size, cudaMemcpyHostToDevice);
 
-  dim3 dimBlock(64, 64);
+  const int tile = 64;
+  dim3 dimBlock(tile, tile);
   dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x,
                (N + dimBlock.y - 1) / dimBlock.y);
 
