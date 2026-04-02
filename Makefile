@@ -1,22 +1,24 @@
-CXX 			= clang++
-CXXFLAGS 	= -O3 -march=native -fopenmp -ffast-math -Wall -Wextra -Werror
-LDFLAGS 	= -fopenmp -lopenblas
+NVCC      := nvcc
+NVCCFLAGS := -O3 -Xcompiler -Wall -std=c++11
 
-TARGET 		= gemm
+GPU_ARCH := 20
 
-SRCS 			= main.cpp 
-OBJS 			= $(SRCS:.cpp=.o)
-HDRS 			= Matrix.hpp Kernels.hpp
+ARCH := -gencode arch=compute_$(GPU_ARCH),code=sm_$(GPU_ARCH)
+
+TARGET  := dgemm
+SRC     := main.cu
+HEADERS := Kernels.cuh Matrix.hpp
+OBJ     := main.o
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	$(CXX) $(OBJS) -o $(TARGET) $(LDFLAGS)
+$(TARGET): $(OBJ)
+	$(NVCC) $(NVCCFLAGS) $(ARCH) $(OBJ) -o $(TARGET)
 
-%.o: %.cpp $(HDRS)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+$(OBJ): $(SRC) $(HEADERS)
+	$(NVCC) $(NVCCFLAGS) $(ARCH) -c $(SRC) -o $(OBJ)
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(TARGET) $(OBJ) 
 
 .PHONY: all clean
