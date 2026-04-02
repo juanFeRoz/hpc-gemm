@@ -1,9 +1,16 @@
 #include "Kernels.cuh"
 #include "Matrix.hpp"
 #include <cuda_runtime.h>
+#include <iostream>
 
-int main() {
-  const size_t N = 2880;
+int main(int argc, char *argv[]) {
+  size_t N = 512;
+  int tile = 8;
+  if (argc >= 2)
+    N = std::atoi(argv[1]);
+  if (argc >= 3)
+    tile = std::atoi(argv[2]);
+
   Matrix<float> A(N, N);
   Matrix<float> B(N, N);
   Matrix<float> C(N, N);
@@ -24,13 +31,16 @@ int main() {
   cudaMemcpy(dA, A.data(), size, cudaMemcpyHostToDevice);
   cudaMemcpy(dB, B.data(), size, cudaMemcpyHostToDevice);
 
-  const int tile = 64;
   dim3 dimBlock(tile, tile);
   dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x,
                (N + dimBlock.y - 1) / dimBlock.y);
 
   Kernels::dgemm_naive<<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
 
+  cudaError_t err = cudaGetLastError();
+  if (err != cudaSuccess) {
+    std::cerr << "CUDA Error: " << cudaGetErrorString(err) << std::endl;
+  }
   cudaFree(dA);
   cudaFree(dB);
   cudaFree(dC);
