@@ -42,7 +42,7 @@ int main() {
 
   cudaEventSynchronize(end);
 
-  double milliseconds = 0;
+  float milliseconds = 0;
   cudaEventElapsedTime(&milliseconds, start, end);
   double seconds = milliseconds / 1000.0;
   double gflops = (2.0 * N * N * N) / (seconds * 1e9);
