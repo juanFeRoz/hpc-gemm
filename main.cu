@@ -5,11 +5,11 @@
 
 int main(int argc, char *argv[]) {
   size_t N = 512;
-  int tile = 8;
+  int blockSize = 8;
   if (argc >= 2)
     N = std::atoi(argv[1]);
   if (argc >= 3)
-    tile = std::atoi(argv[2]);
+    blockSize = std::atoi(argv[2]);
 
   Matrix<float> A(N, N);
   Matrix<float> B(N, N);
@@ -31,16 +31,27 @@ int main(int argc, char *argv[]) {
   cudaMemcpy(dA, A.data(), size, cudaMemcpyHostToDevice);
   cudaMemcpy(dB, B.data(), size, cudaMemcpyHostToDevice);
 
-  dim3 dimBlock(tile, tile);
-  dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x,
-               (N + dimBlock.y - 1) / dimBlock.y);
+  dim3 dimBlock(blockSize * blockSize);
+  dim3 dimGrid((N + blockSize - 1) / blockSize,
+               (N + blockSize - 1) / blockSize);
 
-  Kernels::dgemm_naive<<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
   cudaDeviceSynchronize();
 
   const int iterations = 10;
   for (int i = 0; i < iterations; ++i) {
-    Kernels::dgemm_naive<<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
+    switch (blockSize) {
+    case 8:
+      Kernels::sgemm_naive<8><<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
+      break;
+    case 16:
+      Kernels::sgemm_naive<16><<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
+      break;
+    case 32:
+      Kernels::sgemm_naive<32><<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
+      break;
+    default:
+      break;
+    }
   }
   cudaDeviceSynchronize();
 
