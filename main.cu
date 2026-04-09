@@ -5,7 +5,7 @@
 
 int main(int argc, char *argv[]) {
   size_t N = 512;
-  int blockSize = 8;
+  int blockSize = 16;
   if (argc >= 2)
     N = std::atoi(argv[1]);
   if (argc >= 3)
@@ -18,10 +18,7 @@ int main(int argc, char *argv[]) {
   A.fillRandom();
   B.fillRandom();
 
-  float *dA;
-  float *dB;
-  float *dC;
-
+  float *dA, *dB, *dC;
   size_t size = N * N * sizeof(float);
 
   cudaMalloc(&dA, size);
@@ -31,34 +28,31 @@ int main(int argc, char *argv[]) {
   cudaMemcpy(dA, A.data(), size, cudaMemcpyHostToDevice);
   cudaMemcpy(dB, B.data(), size, cudaMemcpyHostToDevice);
 
-  dim3 dimBlock(blockSize * blockSize);
-  dim3 dimGrid((N + blockSize - 1) / blockSize,
-               (N + blockSize - 1) / blockSize);
-
-  cudaDeviceSynchronize();
-
   const int iterations = 10;
   for (int i = 0; i < iterations; ++i) {
-    switch (blockSize) {
-    case 8:
-      Kernels::sgemm_naive<8><<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
-      break;
-    case 16:
-      Kernels::sgemm_naive<16><<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
-      break;
-    case 32:
-      Kernels::sgemm_naive<32><<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
-      break;
-    default:
-      break;
+    if (blockSize == 8) {
+      dim3 dimBlock((8 * 8) / 8);
+      dim3 dimGrid((N + 8 - 1) / 8, (N + 8 - 1) / 8);
+      Kernels::sgemm1DTiling<8, 8, 8, 8>
+          <<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
+    } else if (blockSize == 16) {
+      dim3 dimBlock((16 * 16) / 8);
+      dim3 dimGrid((N + 16 - 1) / 16, (N + 16 - 1) / 16);
+      Kernels::sgemm1DTiling<16, 16, 8, 8>
+          <<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
+    } else if (blockSize == 32) {
+      dim3 dimBlock((32 * 32) / 8);
+      dim3 dimGrid((N + 32 - 1) / 32, (N + 32 - 1) / 32);
+      Kernels::sgemm1DTiling<32, 32, 8, 8>
+          <<<dimGrid, dimBlock>>>(N, N, N, dA, dB, dC);
     }
   }
-  cudaDeviceSynchronize();
 
   cudaError_t err = cudaGetLastError();
   if (err != cudaSuccess) {
     std::cerr << "CUDA Error: " << cudaGetErrorString(err) << std::endl;
   }
+
   cudaFree(dA);
   cudaFree(dB);
   cudaFree(dC);

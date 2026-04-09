@@ -1,0 +1,21 @@
+CompileFlags:
+  Add: [
+    "-xcuda",
+    "--cuda-path=/opt/cuda/",
+    "--cuda-gpu-arch=sm_70", 
+    "-I/opt/cuda/include",
+    "-D__CUDACC__",
+    "-D__NVCC__",
+    "-Wno-unknown-cuda-version",
+    "-Wno-cuda-flush-denormals-to-zero",
+    "--no-cuda-version-check"
+  ]
+
+Diagnostics:
+  Suppress: [
+    "drv_argument_not_allowed_with", 
+    "pp_included_file_not_found"
+  ]
+
+Index:
+  Background: Build
