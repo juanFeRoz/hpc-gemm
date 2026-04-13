@@ -13,23 +13,43 @@ template <typename Container> void fillWithRandom(Container &c) {
 }
 
 int main() {
-  constexpr int N = 512;
-  std::array<float, N * N> A{};
+  constexpr int N = 2048;
+  std::vector<float> A(N * N);
   fillWithRandom(A);
-  std::array<float, N * N> B{};
+  std::vector<float> B(N * N);
   fillWithRandom(B);
 
   sycl::queue q{sycl::property::queue::in_order()};
 
   float *dA{sycl::malloc_device<float>(N * N, q)};
   q.submit(
-      [&](sycl::handler &h) { h.memcpy(dA, &A[0], N * N * sizeof(float)); });
+      [&](sycl::handler &h) { h.memcpy(dA, A.data(), N * N * sizeof(float)); });
 
   float *dB{sycl::malloc_device<float>(N * N, q)};
   q.submit(
-      [&](sycl::handler &h) { h.memcpy(dB, &B[0], N * N * sizeof(float)); });
+      [&](sycl::handler &h) { h.memcpy(dB, B.data(), N * N * sizeof(float)); });
 
   float *dC{sycl::malloc_device<float>(N * N, q)};
+  q.submit([&](sycl::handler &h) {
+     h.parallel_for(sycl::range{N}, [=](sycl::id<1> idx) {
+       size_t j{idx[0]};
+       for (size_t i{0}; i < N; ++i) {
+         float sum{0};
+         for (size_t k{0}; k < N; ++k) {
+           sum += dA[i * N + k] * dB[k * N + j];
+         }
+         dC[i * N + j] = sum;
+       }
+     });
+   }).wait();
+
+  std::vector<float> C(N * N);
+  q.submit(
+      [&](sycl::handler &h) { h.memcpy(C.data(), dC, N * N * sizeof(float)); });
+
+  sycl::free(dA, q);
+  sycl::free(dB, q);
+  sycl::free(dC, q);
 
   return 0;
 }
