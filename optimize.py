@@ -24,4 +24,4 @@ study = optuna.create_study(direction="minimize")
 study.optimize(objective, n_trials=50)
 
 print("Best params:", study.best_params)
-print("Best time:", study.best_value)
+print("Best time (ms):", study.best_value)

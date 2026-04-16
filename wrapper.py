@@ -1,7 +1,6 @@
 import ctypes
-import numpy as np
 
-lib = ctypes.CDLL("./libkernel.so")
+lib = ctypes.CDLL("./kernel_matmul.so")
 
 lib.run_kernel.argtypes = [
     ctypes.c_int, ctypes.c_int, ctypes.c_int,
