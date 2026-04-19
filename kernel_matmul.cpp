@@ -43,8 +43,7 @@ extern "C" float run_kernel(int M, int N, int K, int BM, int BN, int BK,
                       int threadRow = tid / BN;
                       int threadCol = tid % BN;
 
-                      // cada hilo calcula TM resultados en fila
-                      float acc[32]; // TM máximo
+                      float acc[32];
                       for (int i = 0; i < TM; i++)
                         acc[i] = 0.0f;
 
