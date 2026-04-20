@@ -1,8 +1,27 @@
-kernel_matmul.so: kernel_matmul.o
-	acpp -shared -o kernel_matmul.so kernel_matmul.o
+SYCL_KERNEL := kernel_matmul_sycl.cpp
+CUDA_KERNEL := kernel_matmul_cuda.cu
 
-kernel_matmul.o: kernel_matmul.cpp
-	acpp -O3 -fPIC -c kernel_matmul.cpp -o kernel_matmul.o 
+SYCL_OBJ := $(SYCL_KERNEL:.cpp=.o)
+SYCL_LIB := $(SYCL_KERNEL:.cpp=.so)
+
+CUDA_OBJ := $(CUDA_KERNEL:.cu=.o)
+CUDA_LIB := $(CUDA_KERNEL:.cu=.so)
+
+ACPP_FLAGS := --acpp-targets="cuda:sm_52" -O3 -fPIC
+
+all: $(SYCL_LIB) $(CUDA_LIB)
+
+$(SYCL_LIB): $(SYCL_OBJ)
+	acpp $(ACPP_FLAGS) -shared -o $@ $
+
+$(SYCL_OBJ): $(SYCL_KERNEL)
+	acpp $(ACPP_FLAGS) -c $< -o $@
+
+$(CUDA_LIB): $(CUDA_OBJ)
+	nvcc -shared -o $@ $
+
+$(CUDA_OBJ): $(CUDA_KERNEL)
+	nvcc -O3 -Xcompiler -fPIC -c $< -o $@
 
 clean:
-	rm -f kernel_matmul.o kernel_matmul.so
+	rm -f $(SYCL_OBJ) $(SYCL_LIB) $(CUDA_OBJ) $(CUDA_LIB)
