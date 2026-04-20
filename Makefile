@@ -7,7 +7,7 @@ SYCL_LIB := $(SYCL_KERNEL:.cpp=.so)
 CUDA_OBJ := $(CUDA_KERNEL:.cu=.o)
 CUDA_LIB := $(CUDA_KERNEL:.cu=.so)
 
-ACPP_FLAGS := --acpp-targets="cuda:sm_52" -O3 -fPIC
+ACPP_FLAGS := -O3 -fPIC
 
 all: $(SYCL_LIB) $(CUDA_LIB)
 
