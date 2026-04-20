@@ -12,11 +12,9 @@ set -euo pipefail
 module load adaptivecpp/nvidia
 module load cuda
 
-# Build
 make clean
 make
 
-# Python env - create only if it doesn't exist yet
 if [ ! -d "./venv" ]; then
     python3 -m venv ./venv
 fi

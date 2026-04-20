@@ -96,7 +96,7 @@ sycl::event sgemm_blocktiling_1d_kernel(sycl::queue &q, int num_rows_a,
 
 extern "C" float run_kernel(int M, int N, int K, int BM, int BN, int BK, int TM,
                             unsigned int seed) {
-  sycl::queue q(sycl::cpu_selector_v,
+  sycl::queue q(sycl::gpu_selector_v,
                 sycl::property::queue::enable_profiling{});
 
   auto gen = make_rng(seed);
