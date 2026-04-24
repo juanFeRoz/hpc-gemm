@@ -116,8 +116,9 @@ extern "C" float run_kernel(int M, int N, int K, int BM_arg, int BN_arg, int BK_
                             unsigned int seed)
 {
   // Verify that runtime parameters match compile-time template parameters
-  if (BM_arg != _BM || BN_arg != _BN || BK_arg != _BK || TM_arg != _TM) {
-    return -1.0f;  // Parameter mismatch
+  if (BM_arg != _BM || BN_arg != _BN || BK_arg != _BK || TM_arg != _TM)
+  {
+    return -1.0f; // Parameter mismatch
   }
 
   sycl::queue q(sycl::gpu_selector_v,

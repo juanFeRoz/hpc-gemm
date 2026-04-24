@@ -206,7 +206,7 @@ def bayesian_search(backend="sycl", num_runs=3, num_trials=30):
 
     sampler = optuna.samplers.TPESampler(
         seed=42,
-        n_startup_trials=min(10, num_trials // 3),  # random phase scales with budget
+        n_startup_trials=min(10, num_trials // 3),  
         constant_liar=True,     # discourages re-suggesting 
         multivariate=True,      # models parameter interactions (BM+TM co-vary)
     )
@@ -294,12 +294,6 @@ def main():
     
     if results:
         results_sorted = sorted(results, key=lambda x: x["time_ms"])
-        
-        print("\n" + "="*80)
-        print("TOP 10 CONFIGURATIONS (sorted by performance)")
-        print("="*80)
-        print(f"{'Rank':<6} {'BM':<6} {'BN':<6} {'BK':<6} {'TM':<6} {'Time (ms)':<15} {'GFLOP/s':<12}")
-        print("-"*80)
         
         for rank, config in enumerate(results_sorted[:10], 1):
             print(f"{rank:<6} {config['BM']:<6} {config['BN']:<6} {config['BK']:<6} {config['TM']:<6} "
