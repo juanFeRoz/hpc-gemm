@@ -1,5 +1,0 @@
-build
-*.so
-*.o
-venv
-__pycache__

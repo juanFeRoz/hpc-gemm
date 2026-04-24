@@ -3,15 +3,18 @@
 #include <sycl/sycl.hpp>
 #include <vector>
 
-std::mt19937 make_rng(unsigned int seed = std::random_device{}()) {
+std::mt19937 make_rng(unsigned int seed = std::random_device{}())
+{
   return std::mt19937(seed);
 }
 
 template <typename Container>
-void fillWithRandom(Container &c, std::mt19937 &gen) {
+void fillWithRandom(Container &c, std::mt19937 &gen)
+{
   using T = typename Container::value_type;
   std::uniform_real_distribution<T> dis(0.0f, 1.0f);
-  std::generate(std::begin(c), std::end(c), [&]() { return dis(gen); });
+  std::generate(std::begin(c), std::end(c), [&]()
+                { return dis(gen); });
 }
 
 template <const int BM, const int BN, const int BK, const int TM>
@@ -19,13 +22,15 @@ sycl::event sgemm_blocktiling_1d_kernel(sycl::queue &q, int num_rows_a,
                                         int num_cols_b, int num_cols_a,
                                         float alpha, const float *matrix_a,
                                         const float *matrix_b, float beta,
-                                        float *matrix_c) {
+                                        float *matrix_c)
+{
 
   sycl::range<2> local_range(BM / TM, BN);
   sycl::range<2> global_range(((num_rows_a + BM - 1) / BM) * (BM / TM),
                               ((num_cols_b + BN - 1) / BN) * BN);
 
-  return q.submit([&](sycl::handler &h) {
+  return q.submit([&](sycl::handler &h)
+                  {
     sycl::local_accessor<float, 1> tile_a(BM * BK, h);
     sycl::local_accessor<float, 1> tile_b(BK * BN, h);
 
@@ -90,12 +95,31 @@ sycl::event sgemm_blocktiling_1d_kernel(sycl::queue &q, int num_rows_a,
                   alpha * thread_results[res_idx] + beta * matrix_c[c_idx];
             }
           }
-        });
-  });
+        }); });
 }
 
-extern "C" float run_kernel(int M, int N, int K, int BM, int BN, int BK, int TM,
-                            unsigned int seed) {
+// Template parameters must be defined at compile time via -D_BM, -D_BN, -D_BK, -D_TM flags
+#ifndef _BM
+#define _BM 32
+#endif
+#ifndef _BN
+#define _BN 32
+#endif
+#ifndef _BK
+#define _BK 32
+#endif
+#ifndef _TM
+#define _TM 1
+#endif
+
+extern "C" float run_kernel(int M, int N, int K, int BM_arg, int BN_arg, int BK_arg, int TM_arg,
+                            unsigned int seed)
+{
+  // Verify that runtime parameters match compile-time template parameters
+  if (BM_arg != _BM || BN_arg != _BN || BK_arg != _BK || TM_arg != _TM) {
+    return -1.0f;  // Parameter mismatch
+  }
+
   sycl::queue q(sycl::gpu_selector_v,
                 sycl::property::queue::enable_profiling{});
 
@@ -115,35 +139,10 @@ extern "C" float run_kernel(int M, int N, int K, int BM, int BN, int BK, int TM,
 
   const float alpha = 1.0f, beta = 0.0f;
 
-  sycl::event e;
-  if (BM == 8 && BN == 8 && BK == 8 && TM == 1)
-    e = sgemm_blocktiling_1d_kernel<8, 8, 8, 1>(q, M, N, K, alpha, dA, dB, beta,
-                                                dC);
-  else if (BM == 16 && BN == 16 && BK == 8 && TM == 2)
-    e = sgemm_blocktiling_1d_kernel<16, 16, 8, 2>(q, M, N, K, alpha, dA, dB,
-                                                  beta, dC);
-  else if (BM == 32 && BN == 32 && BK == 8 && TM == 4)
-    e = sgemm_blocktiling_1d_kernel<32, 32, 8, 4>(q, M, N, K, alpha, dA, dB,
-                                                  beta, dC);
-  else if (BM == 16 && BN == 16 && BK == 16 && TM == 1)
-    e = sgemm_blocktiling_1d_kernel<16, 16, 16, 1>(q, M, N, K, alpha, dA, dB,
-                                                   beta, dC);
-  else if (BM == 32 && BN == 32 && BK == 16 && TM == 2)
-    e = sgemm_blocktiling_1d_kernel<32, 32, 16, 2>(q, M, N, K, alpha, dA, dB,
-                                                   beta, dC);
-  else if (BM == 32 && BN == 32 && BK == 32 && TM == 1)
-    e = sgemm_blocktiling_1d_kernel<32, 32, 32, 1>(q, M, N, K, alpha, dA, dB,
-                                                   beta, dC);
-  else {
-    sycl::free(dA, q);
-    sycl::free(dB, q);
-    sycl::free(dC, q);
-    return -1.0f;
-  }
+  sycl::event e = sgemm_blocktiling_1d_kernel<_BM, _BN, _BK, _TM>(q, M, N, K, alpha, dA, dB, beta, dC);
   e.wait();
 
-  auto t_start =
-      e.get_profiling_info<sycl::info::event_profiling::command_start>();
+  auto t_start = e.get_profiling_info<sycl::info::event_profiling::command_start>();
   auto t_end = e.get_profiling_info<sycl::info::event_profiling::command_end>();
 
   sycl::free(dA, q);

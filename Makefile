@@ -1,31 +1,38 @@
 SYCL_KERNEL := kernel_matmul_sycl.cpp
-CUDA_KERNEL := kernel_matmul_cuda.cu
+HIP_KERNEL := kernel_matmul_cuda.hip
 
 SYCL_OBJ := kernel_matmul_sycl.o
 SYCL_LIB := kernel_matmul_sycl.so
 
-CUDA_OBJ := kernel_matmul_cuda.o
-CUDA_LIB := kernel_matmul_cuda.so
+HIP_OBJ := kernel_matmul_cuda.o
+HIP_LIB := kernel_matmul_cuda.so
 
-ACPP_FLAGS := -O3 -fPIC
+ACPP_FLAGS := -O3 
+HIP_FLAGS := -O3
 
-all: $(SYCL_LIB) $(CUDA_LIB)
+# Allow template parameters to be set via environment or command line
+BM ?= 32
+BN ?= 32
+BK ?= 32
+TM ?= 1
 
-# Link SYCL
+# Append template parameter defines to compiler flags
+ACPP_FLAGS += -D_BM=$(BM) -D_BN=$(BN) -D_BK=$(BK) -D_TM=$(TM)
+HIP_FLAGS += -D_BM=$(BM) -D_BN=$(BN) -D_BK=$(BK) -D_TM=$(TM)
+
+all: $(SYCL_LIB) $(HIP_LIB)
+
 $(SYCL_LIB): $(SYCL_OBJ)
-	acpp $(ACPP_FLAGS) -shared -o kernel_matmul_sycl.so kernel_matmul_sycl.o
+	acpp $(ACPP_FLAGS) -shared -o $(SYCL_LIB) $(SYCL_OBJ)
 
-# Compile SYCL
 $(SYCL_OBJ): $(SYCL_KERNEL)
-	acpp $(ACPP_FLAGS) -c kernel_matmul_sycl.cpp -o kernel_matmul_sycl.o
+	acpp $(ACPP_FLAGS) -fPIC -c $(SYCL_KERNEL) -o $(SYCL_OBJ)
 
-# Link CUDA
-$(CUDA_LIB): $(CUDA_OBJ)
-	nvcc -ccbin /usr/bin/gcc -shared -o kernel_matmul_cuda.so kernel_matmul_cuda.o
+$(HIP_LIB): $(HIP_OBJ)
+	hipcc $(HIP_FLAGS) -shared -o $(HIP_LIB) $(HIP_OBJ)
 
-# Compile CUDA
-$(CUDA_OBJ): $(CUDA_KERNEL)
-	nvcc -O3 -ccbin /usr/bin/gcc -Xcompiler -fPIC -c kernel_matmul_cuda.cu -o kernel_matmul_cuda.o
+$(HIP_OBJ): $(HIP_KERNEL)
+	hipcc $(HIP_FLAGS) -Xcompiler -fPIC -c $(HIP_KERNEL) -o $(HIP_OBJ)
 
 clean:
-	rm -f $(SYCL_OBJ) $(SYCL_LIB) $(CUDA_OBJ) $(CUDA_LIB)
+	rm -f $(SYCL_OBJ) $(SYCL_LIB) $(HIP_OBJ) $(HIP_LIB)

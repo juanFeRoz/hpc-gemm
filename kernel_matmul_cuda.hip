@@ -1,5 +1,5 @@
 #include <algorithm>
-#include <cuda_runtime.h>
+#include <hip/hip_runtime.h>
 #include <random>
 #include <vector>
 
@@ -81,67 +81,62 @@ __global__ void sgemm_blocktiling_1d_kernel(int num_rows_a, int num_cols_b,
   }
 }
 
-extern "C" float run_kernel(int M, int N, int K, int BM, int BN, int BK, int TM,
+// Template parameters must be defined at compile time via -D_BM, -D_BN, -D_BK, -D_TM flags
+#ifndef _BM
+#define _BM 32
+#endif
+#ifndef _BN
+#define _BN 32
+#endif
+#ifndef _BK
+#define _BK 32
+#endif
+#ifndef _TM
+#define _TM 1
+#endif
+
+extern "C" float run_kernel(int M, int N, int K, int BM_arg, int BN_arg, int BK_arg, int TM_arg,
                             unsigned int seed) {
+  // Verify that runtime parameters match compile-time template parameters
+  if (BM_arg != _BM || BN_arg != _BN || BK_arg != _BK || TM_arg != _TM) {
+    return -1.0f;  // Parameter mismatch
+  }
+
   auto gen = make_rng(seed);
   std::vector<float> A(M * K), B(K * N);
   fillWithRandom(A, gen);
   fillWithRandom(B, gen);
 
   float *dA, *dB, *dC;
-  cudaMalloc(&dA, M * K * sizeof(float));
-  cudaMalloc(&dB, K * N * sizeof(float));
-  cudaMalloc(&dC, M * N * sizeof(float));
-  cudaMemset(dC, 0, M * N * sizeof(float));
-  cudaMemcpy(dA, A.data(), M * K * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(dB, B.data(), K * N * sizeof(float), cudaMemcpyHostToDevice);
+  hipMalloc(&dA, M * K * sizeof(float));
+  hipMalloc(&dB, K * N * sizeof(float));
+  hipMalloc(&dC, M * N * sizeof(float));
+  hipMemset(dC, 0, M * N * sizeof(float));
+  hipMemcpy(dA, A.data(), M * K * sizeof(float), hipMemcpyHostToDevice);
+  hipMemcpy(dB, B.data(), K * N * sizeof(float), hipMemcpyHostToDevice);
 
-  dim3 dimBlock((BM / TM) * BN);
-  dim3 dimGrid((M + BM - 1) / BM, (N + BN - 1) / BN);
+  dim3 dimBlock((_BM / _TM) * _BN);
+  dim3 dimGrid((M + _BM - 1) / _BM, (N + _BN - 1) / _BN);
   const float alpha = 1.0f, beta = 0.0f;
 
-  cudaEvent_t start, stop;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
+  hipEvent_t start, stop;
+  hipEventCreate(&start);
+  hipEventCreate(&stop);
 
-  cudaEventRecord(start);
-  if (BM == 8 && BN == 8 && BK == 8 && TM == 1)
-    sgemm_blocktiling_1d_kernel<8, 8, 8, 1>
-        <<<dimGrid, dimBlock>>>(M, N, K, alpha, dA, dB, beta, dC);
-  else if (BM == 16 && BN == 16 && BK == 8 && TM == 2)
-    sgemm_blocktiling_1d_kernel<16, 16, 8, 2>
-        <<<dimGrid, dimBlock>>>(M, N, K, alpha, dA, dB, beta, dC);
-  else if (BM == 32 && BN == 32 && BK == 8 && TM == 4)
-    sgemm_blocktiling_1d_kernel<32, 32, 8, 4>
-        <<<dimGrid, dimBlock>>>(M, N, K, alpha, dA, dB, beta, dC);
-  else if (BM == 16 && BN == 16 && BK == 16 && TM == 1)
-    sgemm_blocktiling_1d_kernel<16, 16, 16, 1>
-        <<<dimGrid, dimBlock>>>(M, N, K, alpha, dA, dB, beta, dC);
-  else if (BM == 32 && BN == 32 && BK == 16 && TM == 2)
-    sgemm_blocktiling_1d_kernel<32, 32, 16, 2>
-        <<<dimGrid, dimBlock>>>(M, N, K, alpha, dA, dB, beta, dC);
-  else if (BM == 32 && BN == 32 && BK == 32 && TM == 1)
-    sgemm_blocktiling_1d_kernel<32, 32, 32, 1>
-        <<<dimGrid, dimBlock>>>(M, N, K, alpha, dA, dB, beta, dC);
-  else {
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
-    cudaFree(dA);
-    cudaFree(dB);
-    cudaFree(dC);
-    return -1.0f;
-  }
-  cudaEventRecord(stop);
-  cudaEventSynchronize(stop);
+  hipEventRecord(start);
+  sgemm_blocktiling_1d_kernel<_BM, _BN, _BK, _TM>
+      <<<dimGrid, dimBlock>>>(M, N, K, alpha, dA, dB, beta, dC);
+  hipEventRecord(stop);
+  hipEventSynchronize(stop);
 
   float elapsed_ms = 0.0f;
-  cudaEventElapsedTime(&elapsed_ms, start, stop);
-  cudaEventDestroy(start);
-  cudaEventDestroy(stop);
+  hipEventElapsedTime(&elapsed_ms, start, stop);
+  hipEventDestroy(start);
+  hipEventDestroy(stop);
 
-  cudaFree(dA);
-  cudaFree(dB);
-  cudaFree(dC);
+  hipFree(dA);
+  hipFree(dB);
+  hipFree(dC);
 
   return elapsed_ms;
 }
