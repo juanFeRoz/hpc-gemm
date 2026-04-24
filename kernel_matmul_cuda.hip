@@ -3,15 +3,18 @@
 #include <random>
 #include <vector>
 
-std::mt19937 make_rng(unsigned int seed = std::random_device{}()) {
+std::mt19937 make_rng(unsigned int seed = std::random_device{}())
+{
   return std::mt19937(seed);
 }
 
 template <typename Container>
-void fillWithRandom(Container &c, std::mt19937 &gen) {
+void fillWithRandom(Container &c, std::mt19937 &gen)
+{
   using T = typename Container::value_type;
   std::uniform_real_distribution<T> dis(0.0f, 1.0f);
-  std::generate(std::begin(c), std::end(c), [&]() { return dis(gen); });
+  std::generate(std::begin(c), std::end(c), [&]()
+                { return dis(gen); });
 }
 
 template <const int BM, const int BN, const int BK, const int TM>
@@ -19,7 +22,8 @@ __global__ void sgemm_blocktiling_1d_kernel(int num_rows_a, int num_cols_b,
                                             int num_cols_a, float alpha,
                                             const float *matrix_a,
                                             const float *matrix_b, float beta,
-                                            float *matrix_c) {
+                                            float *matrix_c)
+{
   const uint block_row = blockIdx.x;
   const uint block_col = blockIdx.y;
 
@@ -38,7 +42,8 @@ __global__ void sgemm_blocktiling_1d_kernel(int num_rows_a, int num_cols_b,
 
   float thread_results[TM] = {0.0f};
 
-  for (int tile_idx = 0; tile_idx < num_cols_a; tile_idx += BK) {
+  for (int tile_idx = 0; tile_idx < num_cols_a; tile_idx += BK)
+  {
     const uint a_row = threadIdx.x / BK;
     const uint a_col = threadIdx.x % BK;
     if ((block_row * BM + a_row) < num_rows_a &&
@@ -60,9 +65,11 @@ __global__ void sgemm_blocktiling_1d_kernel(int num_rows_a, int num_cols_b,
     matrix_a += BK;
     matrix_b += BK * num_cols_b;
 
-    for (uint dot_idx = 0; dot_idx < BK; ++dot_idx) {
+    for (uint dot_idx = 0; dot_idx < BK; ++dot_idx)
+    {
       float b_tmp = tile_b[dot_idx * BN + thread_col];
-      for (uint res_idx = 0; res_idx < TM; ++res_idx) {
+      for (uint res_idx = 0; res_idx < TM; ++res_idx)
+      {
         thread_results[res_idx] +=
             tile_a[(thread_row * TM + res_idx) * BK + dot_idx] * b_tmp;
       }
@@ -70,9 +77,11 @@ __global__ void sgemm_blocktiling_1d_kernel(int num_rows_a, int num_cols_b,
     __syncthreads();
   }
 
-  for (uint res_idx = 0; res_idx < TM; ++res_idx) {
+  for (uint res_idx = 0; res_idx < TM; ++res_idx)
+  {
     int row = global_row + res_idx;
-    if (row < num_rows_a && global_col < num_cols_b) {
+    if (row < num_rows_a && global_col < num_cols_b)
+    {
       matrix_c[(thread_row * TM + res_idx) * num_cols_b + thread_col] =
           alpha * thread_results[res_idx] +
           beta *
@@ -96,10 +105,12 @@ __global__ void sgemm_blocktiling_1d_kernel(int num_rows_a, int num_cols_b,
 #endif
 
 extern "C" float run_kernel(int M, int N, int K, int BM_arg, int BN_arg, int BK_arg, int TM_arg,
-                            unsigned int seed) {
+                            unsigned int seed)
+{
   // Verify that runtime parameters match compile-time template parameters
-  if (BM_arg != _BM || BN_arg != _BN || BK_arg != _BK || TM_arg != _TM) {
-    return -1.0f;  // Parameter mismatch
+  if (BM_arg != _BM || BN_arg != _BN || BK_arg != _BK || TM_arg != _TM)
+  {
+    return -1.0f; // Parameter mismatch
   }
 
   auto gen = make_rng(seed);

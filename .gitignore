@@ -3,3 +3,4 @@
 *.json
 venv
 __pycache__
+*.png
