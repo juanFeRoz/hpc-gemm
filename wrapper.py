@@ -2,7 +2,7 @@ import ctypes
 
 _ARGTYPES = [
     ctypes.c_int, ctypes.c_int, ctypes.c_int,
-    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
     ctypes.c_uint
 ]
 _RESTYPE = ctypes.c_float
@@ -13,12 +13,22 @@ def _load(path):
     lib.run_kernel.restype = _RESTYPE
     return lib
 
-_libs = {
-    "sycl": _load("./kernel_matmul_sycl.so"),
-    "cuda": _load("./kernel_matmul_cuda.so"),
+_lib_paths = {
+    ("sycl", "matmul"): "./kernel_matmul_sycl.so",
+    ("cuda", "matmul"): "./kernel_matmul_cuda.so",
+    ("sycl", "stencil"): "./kernel_stencil_sycl.so",
+    ("cuda", "stencil"): "./kernel_stencil_cuda.so",
 }
+_libs = {}
 
-def run(M, N, K, BM, BN, BK, TM, backend="sycl", seed=42):
-    if backend not in _libs:
-        raise ValueError(f"Unknown backend '{backend}'. Choose from: {list(_libs)}")
-    return _libs[backend].run_kernel(M, N, K, BM, BN, BK, TM, seed)
+def _get_lib(backend, kernel):
+    key = (backend, kernel)
+    if key not in _lib_paths:
+        raise ValueError(f"Unknown backend/kernel combination '{backend}/{kernel}'. Choose from: {list(_lib_paths)}")
+    if key not in _libs:
+        _libs[key] = _load(_lib_paths[key])
+    return _libs[key]
+
+def run(M, N, K, BM, BN, BK, TM, TN=1, backend="sycl", kernel="matmul", seed=42):
+    lib = _get_lib(backend, kernel)
+    return lib.run_kernel(M, N, K, BM, BN, BK, TM, TN, seed)

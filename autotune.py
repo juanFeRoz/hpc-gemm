@@ -5,30 +5,47 @@ import sys
 import re
 import os
 import random
+import math
+import statistics
 import optuna
 from pathlib import Path
 
-M, N, K = 2048, 2048, 2048
+M, N, K = 512, 512, 512
 
 search_space = {
     "BM": [32, 64, 128],
     "BN": [32, 64, 128],
     "BK": [8, 16, 32],
-    "TM": [1, 2, 4]
+    "TM": [1, 2, 4],
+    "TN": [1, 2, 4]
 }
 
-def compile_config(bm, bn, bk, tm, backend="sycl"):
+
+def all_valid_configs():
+    return [
+        f"{bm}_{bn}_{bk}_{tm}_{tn}"
+        for bm in search_space["BM"]
+        for bn in search_space["BN"]
+        for bk in search_space["BK"]
+        for tm in search_space["TM"]
+        for tn in search_space["TN"]
+        if is_valid_config(bm, bn, bk, tm, tn)[0]
+    ]
+
+
+def compile_config(bm, bn, bk, tm, tn=1, backend="sycl", kernel="matmul"):
     try:
         env = os.environ.copy()
         env['BM'] = str(bm)
         env['BN'] = str(bn)
         env['BK'] = str(bk)
         env['TM'] = str(tm)
+        env['TN'] = str(tn)
         
-        subprocess.run(["rm", "-f", f"kernel_matmul_{backend}.o", f"kernel_matmul_{backend}.so"], capture_output=True)
+        subprocess.run(["rm", "-f", f"kernel_{kernel}_{backend}.o", f"kernel_{kernel}_{backend}.so"], capture_output=True)
         
         result = subprocess.run(
-            ["make", f"kernel_matmul_{backend}.so", f"BM={bm}", f"BN={bn}", f"BK={bk}", f"TM={tm}" ],
+            ["make", f"kernel_{kernel}_{backend}.so", f"BM={bm}", f"BN={bn}", f"BK={bk}", f"TM={tm}", f"TN={tn}" ],
             capture_output=True,
             text=True,
             timeout=60,
@@ -44,25 +61,45 @@ def compile_config(bm, bn, bk, tm, backend="sycl"):
     except Exception as e:
         return False
 
-def benchmark_config(bm, bn, bk, tm, backend="sycl", num_runs=3):
+def benchmark_config(M, N, K, bm, bn, bk, tm, tn=1, backend="sycl", kernel="matmul", num_runs=10):
     try:
-        if not compile_config(bm, bn, bk, tm, backend=backend):
+        if not compile_config(bm, bn, bk, tm, tn, backend=backend, kernel=kernel):
             return None, False
         
-        script_name = f"_benchmark_temp_{bm}_{bn}_{bk}_{tm}.py"
+        script_name = f"_benchmark_temp_{kernel}_{bm}_{bn}_{bk}_{tm}_{tn}.py"
         benchmark_code = f"""
 import sys
+import json
+import math
+import statistics
 sys.path.insert(0, '.')
 from wrapper import run
 
 M, N, K = {M}, {N}, {K}
 times = []
 for i in range({num_runs}):
-    elapsed = run(M, N, K, {bm}, {bn}, {bk}, {tm}, backend="{backend}", seed=42)
+    elapsed = run(M, N, K, {bm}, {bn}, {bk}, {tm}, {tn}, backend=\"{backend}\", kernel=\"{kernel}\", seed=42)
     times.append(elapsed)
 
-avg_time = sum(times[1:]) / len(times[1:]) if {num_runs} > 1 else times[0]
-print(f"{{avg_time:.4f}}")
+n = len(times)
+avg = statistics.mean(times)
+std = statistics.stdev(times) if n > 1 else 0.0
+
+t_critical = {{1:12.706, 2:4.303, 3:3.182, 4:2.776, 5:2.571,
+               6:2.447, 7:2.365, 8:2.306, 9:2.262, 10:2.228,
+               11:2.201, 12:2.179, 13:2.160, 14:2.145, 15:2.131}}
+
+t_coeff = t_critical.get(n, 2.0)
+ci_half = t_coeff * std / math.sqrt(n) if n > 1 else 0.0
+
+stats = {{
+    "mean": avg,
+    "std": std,
+    "ci_half": ci_half,
+    "n": n,
+    "times": times
+}}
+print(json.dumps(stats))
 """
         
         with open(script_name, 'w') as f:
@@ -84,9 +121,9 @@ print(f"{{avg_time:.4f}}")
             return None, False
         
         try:
-            avg_time = float(result.stdout.strip().split('\n')[-1])
-            return avg_time, True
-        except:
+            stats = json.loads(result.stdout.strip().split('\n')[-1])
+            return stats, True
+        except Exception:
             return None, False
             
     except subprocess.TimeoutExpired:
@@ -94,8 +131,8 @@ print(f"{{avg_time:.4f}}")
     except Exception as e:
         return None, False
 
-def is_valid_config(bm, bn, bk, tm):
-    threads_per_block = (bm // tm) * bn
+def is_valid_config(bm, bn, bk, tm, tn=1):
+    threads_per_block = (bm // tm) * (bn // tn)
     if threads_per_block > 1024:
         return False, f"threads={threads_per_block} > 1024"
     
@@ -105,11 +142,11 @@ def is_valid_config(bm, bn, bk, tm):
     
     return True, None
 
-def random_search(backend="cuda", num_runs=3, num_samples=20):
+def random_search(M, N, K, backend="cuda", num_runs=3, num_samples=20, kernel="matmul"):
     results = []
     
     print(f"\n{'='*80}")
-    print(f"Random Search Auto-tuning {backend.upper()} kernel")
+    print(f"Random Search Auto-tuning {backend.upper()} {kernel.upper()} kernel")
     print(f"{'='*80}")
     print(f"Problem size: {M}x{N}x{K}")
     print(f"Samples to evaluate: {num_samples}\n")
@@ -117,43 +154,37 @@ def random_search(backend="cuda", num_runs=3, num_samples=20):
     evaluated = set()
     sample_idx = 0
     
-    while sample_idx < num_samples:
-        bm = random.choice(search_space["BM"])
-        bn = random.choice(search_space["BN"])
-        bk = random.choice(search_space["BK"])
-        tm = random.choice(search_space["TM"])
+    valid_configs = all_valid_configs()
+    if not valid_configs:
+        print("No valid configurations available in search space.")
+        return results
+
+    num_samples = min(num_samples, len(valid_configs))
+    sampled_configs = random.sample(valid_configs, num_samples)
+
+    for sample_idx, config in enumerate(sampled_configs, start=1):
+        bm, bn, bk, tm, tn = map(int, config.split('_'))
+        stats, success = benchmark_config(M, N, K, bm, bn, bk, tm, tn, backend=backend, kernel=kernel, num_runs=num_runs)
         
-        config_tuple = (bm, bn, bk, tm)
-        
-        if config_tuple in evaluated:
-            continue
-        
-        evaluated.add(config_tuple)
-        sample_idx += 1
-        
-        is_valid, reason = is_valid_config(bm, bn, bk, tm)
-        if not is_valid:
-            print(f"[{sample_idx:3d}/{num_samples}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}: SKIPPED ({reason})")
-            continue
-        
-        avg_time, success = benchmark_config(bm, bn, bk, tm, backend=backend, num_runs=num_runs)
-        
-        if success and avg_time:
+        if success and stats:
+            avg_time = stats["mean"]
+            ci_half = stats["ci_half"]
             throughput = (2 * M * N * K) / (avg_time * 1e6)
             results.append({
-                "BM": bm, "BN": bn, "BK": bk, "TM": tm,
+                "BM": bm, "BN": bn, "BK": bk, "TM": tm, "TN": tn,
                 "time_ms": avg_time,
+                "ci_half": ci_half,
                 "throughput_gflops": throughput
             })
-            print(f"[{sample_idx:3d}/{num_samples}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}: {avg_time:8.4f} ms ({throughput:6.2f} GFLOP/s)")
+            print(f"[{sample_idx:3d}/{num_samples}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}, TN={tn}: {avg_time:8.4f} ± {ci_half:.4f} ms ({throughput:6.2f} GFLOP/s)")
         else:
-            print(f"[{sample_idx:3d}/{num_samples}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}: FAILED")
+            print(f"[{sample_idx:3d}/{num_samples}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}, TN={tn}: FAILED")
     
     return results
 
-def bayesian_search(backend="sycl", num_runs=3, num_trials=30):
+def bayesian_search(M, N, K, backend="sycl", num_runs=3, num_trials=30, kernel="matmul"):
     print(f"\n{'='*80}")
-    print(f"Bayesian Optimization Auto-tuning {backend.upper()} kernel (Optuna)")
+    print(f"Bayesian Optimization Auto-tuning {backend.upper()} {kernel.upper()} kernel (Optuna)")
     print(f"{'='*80}")
     print(f"Problem size: {M}x{N}x{K}")
     print(f"Trials to evaluate: {num_trials}\n")
@@ -162,67 +193,58 @@ def bayesian_search(backend="sycl", num_runs=3, num_trials=30):
 
     results = []
     trial_count = [0]
-    evaluated = {} 
 
     def objective(trial):
-        bm = trial.suggest_categorical('BM', search_space["BM"])
-        bn = trial.suggest_categorical('BN', search_space["BN"])
-        bk = trial.suggest_categorical('BK', search_space["BK"])
-        tm = trial.suggest_categorical('TM', search_space["TM"])
+        valid_configs = all_valid_configs()
+        if not valid_configs:
+            raise RuntimeError("No valid configurations available for Bayesian search.")
+
+        config = trial.suggest_categorical('CONFIG', valid_configs)
+        bm, bn, bk, tm, tn = map(int, config.split('_'))
 
         trial_count[0] += 1
         idx = trial_count[0]
-        config = (bm, bn, bk, tm)
 
-        if config in evaluated:
-            cached = evaluated[config]
-            label = f"{cached:.4f} ms (cached)" if cached != float('inf') else "SKIPPED (cached)"
-            print(f"[{idx:3d}/{num_trials}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}: {label}")
-            return cached
+        stats, success = benchmark_config(M, N, K, bm, bn, bk, tm, tn, backend=backend, kernel=kernel, num_runs=num_runs)
 
-        is_valid, reason = is_valid_config(bm, bn, bk, tm)
-        if not is_valid:
-            print(f"[{idx:3d}/{num_trials}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}: SKIPPED ({reason})")
-            evaluated[config] = float('inf')
-            return float('inf')
-
-        avg_time, success = benchmark_config(bm, bn, bk, tm, backend=backend, num_runs=num_runs)
-
-        if success and avg_time and avg_time > 0:
+        if success and stats and stats["mean"] > 0:
+            avg_time = stats["mean"]
+            ci_half = stats["ci_half"]
             throughput = (2 * M * N * K) / (avg_time * 1e6)
-            evaluated[config] = avg_time
             results.append({
-                "BM": bm, "BN": bn, "BK": bk, "TM": tm,
+                "BM": bm, "BN": bn, "BK": bk, "TM": tm, "TN": tn,
                 "time_ms": avg_time,
+                "ci_half": ci_half,
                 "throughput_gflops": throughput,
                 "trial": idx
             })
-            print(f"[{idx:3d}/{num_trials}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}: {avg_time:8.4f} ms ({throughput:6.2f} GFLOP/s)")
+            print(f"[{idx:3d}/{num_trials}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}, TN={tn}: {avg_time:8.4f} ± {ci_half:.4f} ms ({throughput:6.2f} GFLOP/s)")
             return avg_time
         else:
-            evaluated[config] = float('inf')
-            print(f"[{idx:3d}/{num_trials}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}: FAILED")
+            print(f"[{idx:3d}/{num_trials}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}, TN={tn}: FAILED")
             return float('inf')
 
     sampler = optuna.samplers.TPESampler(
         seed=42,
         n_startup_trials=min(10, num_trials // 3),  
-        constant_liar=True,     # discourages re-suggesting 
-        multivariate=True,      # models parameter interactions (BM+TM co-vary)
     )
     study = optuna.create_study(sampler=sampler, direction="minimize")
 
     # Warm-start: give Optuna the corners of the valid space so it doesn't waste
     # startup trials on obviously invalid regions
     valid_configs = [
-        (bm, bn, bk, tm)
+        (bm, bn, bk, tm, tn)
         for bm in search_space["BM"]
         for bn in search_space["BN"]
         for bk in search_space["BK"]
         for tm in search_space["TM"]
-        if is_valid_config(bm, bn, bk, tm)[0]
+        for tn in search_space["TN"]
+        if is_valid_config(bm, bn, bk, tm, tn)[0]
     ]
-    print(f"Valid configurations in search space: {len(valid_configs)}/{len(search_space['BM'])*len(search_space['BN'])*len(search_space['BK'])*len(search_space['TM'])}\n")
+    print(f"Valid configurations in search space: {len(valid_configs)}/{len(search_space['BM'])*len(search_space['BN'])*len(search_space['BK'])*len(search_space['TM'])*len(search_space['TN'])}\n")
+
+    if not valid_configs:
+        return results
 
     study.optimize(objective, n_trials=num_trials, show_progress_bar=False)
 
@@ -232,52 +254,14 @@ def bayesian_search(backend="sycl", num_runs=3, num_trials=30):
 
     return results
 
-def grid_search(backend="sycl", num_runs=3):
-    results = []
-    total_configs = 1
-    for param, values in search_space.items():
-        total_configs *= len(values)
-    
-    config_idx = 0
-    print(f"\n{'='*80}")
-    print(f"Grid Search Auto-tuning {backend.upper()} kernel")
-    print(f"{'='*80}")
-    print(f"Problem size: {M}x{N}x{K}")
-    print(f"Total configurations to test: {total_configs}\n")
-    
-    for bm in search_space["BM"]:
-        for bn in search_space["BN"]:
-            for bk in search_space["BK"]:
-                for tm in search_space["TM"]:
-                    config_idx += 1
-                    
-                    is_valid, reason = is_valid_config(bm, bn, bk, tm)
-                    if not is_valid:
-                        print(f"[{config_idx:3d}/{total_configs}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}: SKIPPED ({reason})")
-                        continue
-                    
-                    avg_time, success = benchmark_config(bm, bn, bk, tm, backend=backend, num_runs=num_runs)
-                    
-                    if success and avg_time:
-                        throughput = (2 * M * N * K) / (avg_time * 1e6)
-                        results.append({
-                            "BM": bm, "BN": bn, "BK": bk, "TM": tm,
-                            "time_ms": avg_time,
-                            "throughput_gflops": throughput
-                        })
-                        print(f"[{config_idx:3d}/{total_configs}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}: {avg_time:8.4f} ms ({throughput:6.2f} GFLOP/s)")
-                    else:
-                        print(f"[{config_idx:3d}/{total_configs}] BM={bm:3d}, BN={bn:3d}, BK={bk:2d}, TM={tm}: FAILED")
-    
-    return results
-
 def main():
     import argparse
     
-    parser = argparse.ArgumentParser(description="Auto-tune matrix multiplication kernel block sizes")
+    parser = argparse.ArgumentParser(description="Auto-tune kernel block sizes")
     parser.add_argument("--backend", default="sycl", choices=["cuda", "sycl"], help="Backend to tune (default: sycl)")
-    parser.add_argument("--runs", type=int, default=3, help="Number of runs per configuration (default: 3)")
-    parser.add_argument("--strategy", default="random", choices=["random", "bayesian", "grid"], 
+    parser.add_argument("--kernel", default="matmul", choices=["matmul", "stencil"], help="Kernel to tune (default: matmul)")
+    parser.add_argument("--runs", type=int, default=10, help="Number of runs per configuration (default: 10)")
+    parser.add_argument("--strategy", default="random", choices=["random", "bayesian"], 
                        help="Search strategy (default: random)")
     parser.add_argument("--samples", type=int, default=20, help="Number of samples for random search (default: 20)")
     parser.add_argument("--trials", type=int, default=30, help="Number of trials for Bayesian optimization (default: 30)")
@@ -286,27 +270,27 @@ def main():
     args = parser.parse_args()
     
     if args.strategy == "random":
-        results = random_search(backend=args.backend, num_runs=args.runs, num_samples=args.samples)
+        results = random_search(backend=args.backend, num_runs=args.runs, num_samples=args.samples, kernel=args.kernel)
     elif args.strategy == "bayesian":
-        results = bayesian_search(backend=args.backend, num_runs=args.runs, num_trials=args.trials)
-    else:  # grid
-        results = grid_search(backend=args.backend, num_runs=args.runs)
+        results = bayesian_search(backend=args.backend, num_runs=args.runs, num_trials=args.trials, kernel=args.kernel)
+    else:
+        raise ValueError(f"Unsupported strategy: {args.strategy}")
     
     if results:
         results_sorted = sorted(results, key=lambda x: x["time_ms"])
         
         for rank, config in enumerate(results_sorted[:10], 1):
-            print(f"{rank:<6} {config['BM']:<6} {config['BN']:<6} {config['BK']:<6} {config['TM']:<6} "
+            print(f"{rank:<6} {config['BM']:<6} {config['BN']:<6} {config['BK']:<6} {config['TM']:<6} {config.get('TN', 1):<6} "
                   f"{config['time_ms']:<15.4f} {config['throughput_gflops']:<12.2f}")
         
         print("\n" + "="*80)
         best = results_sorted[0]
         print(f"\nBEST CONFIGURATION:")
-        print(f"  BM={best['BM']}, BN={best['BN']}, BK={best['BK']}, TM={best['TM']}")
+        print(f"  BM={best['BM']}, BN={best['BN']}, BK={best['BK']}, TM={best['TM']}, TN={best.get('TN', 1)}")
         print(f"  Time: {best['time_ms']:.4f} ms")
         print(f"  Throughput: {best['throughput_gflops']:.2f} GFLOP/s")
         print(f"\nTo use this configuration for compilation:")
-        print(f"  make clean && make BM={best['BM']} BN={best['BN']} BK={best['BK']} TM={best['TM']}")
+        print(f"  make clean && make BM={best['BM']} BN={best['BN']} BK={best['BK']} TM={best['TM']} TN={best.get('TN', 1)}")
         
         with open(args.output, 'w') as f:
             json.dump(results_sorted, f, indent=2)

@@ -7,8 +7,10 @@ This repository contains a small autotuning and benchmarking framework for matri
 - autotune.py — autotuning utilities and search strategies (Bayesian, Random, Grid).
 - test_and_compare.py — compile, benchmark, autotune, compare backends and strategies.
 - wrapper.py — ctypes wrapper to call compiled shared libraries from Python.
-- kernel_matmul_sycl.cpp — SYCL kernel implementation (parameterized via -D flags).
-- kernel_matmul_cuda.hip — CUDA/HIP kernel implementation (parameterized via -D flags).
+- kernel_matmul_sycl.cpp — SYCL matrix multiplication kernel implementation (parameterized via -D flags).
+- kernel_matmul_cuda.hip — CUDA/HIP matrix multiplication kernel implementation (parameterized via -D flags).
+- kernel_stencil_sycl.cpp — SYCL 2D stencil kernel implementation (parameterized via -D flags).
+- kernel_stencil_cuda.hip — CUDA/HIP 2D stencil kernel implementation (parameterized via -D flags).
 - Makefile — build convenience rules for compiling kernels to shared libraries.
 
 ## Requirements
@@ -50,7 +52,8 @@ Autotuning logic resides in `autotune.py`. Available strategies:
 
 - `bayesian_search(...)` — Optuna (recommended when trials are limited)
 - `random_search(...)` — random sampling baseline
-- `grid_search(...)` — exhaustive grid (only feasible for small spaces)
+
+The autotuner also supports both `matmul` and `stencil` kernels with `--kernel matmul` or `--kernel stencil`.
 
 Search space parameters 
 - `BM` (block M) ∈ {32, 64, 128}
@@ -70,6 +73,8 @@ Use the Makefile to compile parameterized shared libraries
 ```bash
 make kernel_matmul_sycl.so BM=32 BN=32 BK=32 TM=4
 make kernel_matmul_cuda.so BM=32 BN=32 BK=32 TM=4
+make kernel_stencil_sycl.so BM=32 BN=32 TM=1 TN=1
+make kernel_stencil_cuda.so BM=32 BN=32 TM=1 TN=1
 ```
 
 Adjust compilers in the Makefile if your environment uses different toolchain commands.
