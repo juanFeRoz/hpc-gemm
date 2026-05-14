@@ -70,17 +70,6 @@ python3 statistical_analysis.py \
   --output statistical_results.json
 ```
 
-### Updated `test_and_compare.py`
-- Now supports `--num-runs` and `--trials` parameters
-- Example for paper:
-```bash
-python3 test_and_compare.py \
-  --M 2048 --N 2048 --K 2048 \
-  --num-runs 10 \
-  --trials 40 \
-  --benchmark-runs 10
-```
-
 ## Statistical Interpretation
 
 The statistical report includes:
@@ -144,28 +133,3 @@ Mann-Whitney U test (non-parametric):
 WINNER: Bayesian
 ================================================================================
 ```
-
-## Recommendations for Your Paper
-
-1. **Minimum Rigor**: 5 independent runs × 30 trials each
-2. **Good Rigor**: 10 independent runs × 40 trials each
-3. **Excellent Rigor**: 10-20 independent runs × 50 trials each
-
-2. **Report Both Tests**: Include both Welch's t-test and Mann-Whitney U results
-
-3. **Include Convergence Plots**: Use convergence data to show how algorithms progress
-
-4. **Report Effect Size**: Not just p-values, but Cohen's d for magnitude
-
-5. **Problem Sizes**: Test on multiple problem sizes (e.g., 512, 1024, 2048)
-
-## Example Paper Section
-
-> We compared Bayesian optimization and random search for autotuning stencil kernels across 10 independent runs with 40 trials per run. Bayesian optimization found configurations with mean time 10.23 ms (SD=0.57), compared to random search at 11.57 ms (SD=1.23). A Welch's t-test showed this difference was statistically significant (t=-2.88, p=.0125) with a large effect size (Cohen's d=1.23). The Mann-Whitney U test confirmed significance (U=15, p=.0089), supporting the superiority of Bayesian optimization for this tuning task.
-
-## Notes
-
-- Seeds are deterministic based on run index (seed = run_idx × 1000)
-- Both Bayesian and Random search use the same seed for fair comparison
-- Convergence analysis tracks cumulative best-so-far for each evaluation
-- All results are automatically saved for reproducibility and follow-up analysis
