@@ -28,8 +28,8 @@ __device__ float stencil_read(int width, int height, const float *input, int r, 
 template <const int BM, const int BN, const int TM, const int TN>
 __global__ void stencil_2d_kernel(int width, int height, const float *input, float *output)
 {
-    const uint block_row = blockIdx.x;
-    const uint block_col = blockIdx.y;
+    const uint block_row = blockIdx.y;
+    const uint block_col = blockIdx.x;
     const uint thread_row = threadIdx.y;
     const uint thread_col = threadIdx.x;
 

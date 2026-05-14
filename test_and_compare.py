@@ -2,6 +2,7 @@
 """
 Comprehensive test script to benchmark CUDA and SYCL kernels,
 autotune SYCL, and compare performance before and after tuning.
+Supports multiple independent runs for statistical analysis.
 """
 
 import subprocess
@@ -18,17 +19,21 @@ parser = argparse.ArgumentParser(description="Benchmark and autotune matrix mult
 parser.add_argument('--M', type=int, default=512, help='Matrix M dimension')
 parser.add_argument('--N', type=int, default=512, help='Matrix N dimension')  
 parser.add_argument('--K', type=int, default=512, help='Matrix K dimension')
+parser.add_argument('--num-runs', type=int, default=1, help='Number of independent tuning runs (default: 1)')
+parser.add_argument('--trials', type=int, default=30, help='Number of trials per tuning run (default: 30)')
+parser.add_argument('--benchmark-runs', type=int, default=10, help='Number of runs per benchmark (default: 10)')
 args = parser.parse_args()
 
 M, N, K = args.M, args.N, args.K
+NUM_INDEPENDENT_RUNS = args.num_runs
+TRIALS_PER_RUN = args.trials
+DEFAULT_BENCHMARK_RUNS = args.benchmark_runs
 
 DEFAULT_BM = 32
 DEFAULT_BN = 32
 DEFAULT_BK = 8
 DEFAULT_TM = 1
 DEFAULT_TN = 1
-DEFAULT_RUNS = 10
-DEFAULT_TRIALS = 15
 
 
 def compile_and_test(bm, bn, bk, tm, tn, backend, kernel="matmul", num_runs=DEFAULT_RUNS):
@@ -92,7 +97,7 @@ def main():
     print(f"\n{'#'*70}")
     print("STEP 1: Testing CUDA with default parameters")
     print(f"{'#'*70}")
-    cuda_default = compile_and_test(DEFAULT_BM, DEFAULT_BN, DEFAULT_BK, DEFAULT_TM, DEFAULT_TN, "cuda", num_runs=DEFAULT_RUNS)
+    cuda_default = compile_and_test(DEFAULT_BM, DEFAULT_BN, DEFAULT_BK, DEFAULT_TM, DEFAULT_TN, "cuda", num_runs=DEFAULT_BENCHMARK_RUNS)
     
     if cuda_default is None:
         print("\nCUDA test failed. Aborting.")
@@ -102,7 +107,7 @@ def main():
     print(f"\n{'#'*70}")
     print("STEP 2: Testing SYCL with default parameters (before tuning)")
     print(f"{'#'*70}")
-    sycl_default = compile_and_test(DEFAULT_BM, DEFAULT_BN, DEFAULT_BK, DEFAULT_TM, DEFAULT_TN, "sycl", num_runs=DEFAULT_RUNS)
+    sycl_default = compile_and_test(DEFAULT_BM, DEFAULT_BN, DEFAULT_BK, DEFAULT_TM, DEFAULT_TN, "sycl", num_runs=DEFAULT_BENCHMARK_RUNS)
     
     if sycl_default is None:
         print("\nSYCL test failed. Aborting.")
@@ -112,8 +117,8 @@ def main():
     print(f"\n{'#'*70}")
     print("STEP 3: Testing 2D stencil kernel with default parameters")
     print(f"{'#'*70}")
-    cuda_stencil = compile_and_test(DEFAULT_BM, DEFAULT_BN, DEFAULT_BK, DEFAULT_TM, DEFAULT_TN, "cuda", kernel="stencil", num_runs=DEFAULT_RUNS)
-    sycl_stencil = compile_and_test(DEFAULT_BM, DEFAULT_BN, DEFAULT_BK, DEFAULT_TM, DEFAULT_TN, "sycl", kernel="stencil", num_runs=DEFAULT_RUNS)
+    cuda_stencil = compile_and_test(DEFAULT_BM, DEFAULT_BN, DEFAULT_BK, DEFAULT_TM, DEFAULT_TN, "cuda", kernel="stencil", num_runs=DEFAULT_BENCHMARK_RUNS)
+    sycl_stencil = compile_and_test(DEFAULT_BM, DEFAULT_BN, DEFAULT_BK, DEFAULT_TM, DEFAULT_TN, "sycl", kernel="stencil", num_runs=DEFAULT_BENCHMARK_RUNS)
 
     if cuda_stencil is None or sycl_stencil is None:
         print("\nStencil test failed. Aborting.")
@@ -129,7 +134,7 @@ def main():
     
     # Bayesian search
     print("3a) Running Bayesian Optimization...")
-    bayesian_results = bayesian_search(M, N, K, backend="sycl", num_runs=DEFAULT_RUNS, num_trials=DEFAULT_TRIALS)
+    bayesian_results = bayesian_search(M, N, K, backend="sycl", num_runs=DEFAULT_BENCHMARK_RUNS, num_trials=TRIALS_PER_RUN)
     bayesian_results_sorted = sorted(bayesian_results, key=lambda x: x["time_ms"])
     tuning_results["bayesian"] = {
         "results": bayesian_results_sorted,
@@ -138,7 +143,7 @@ def main():
     
     # Random search
     print("\n3b) Running Random Search...")
-    random_results = random_search(M, N, K, backend="sycl", num_runs=DEFAULT_RUNS, num_samples=DEFAULT_TRIALS)
+    random_results = random_search(M, N, K, backend="sycl", num_runs=DEFAULT_BENCHMARK_RUNS, num_samples=TRIALS_PER_RUN)
     random_results_sorted = sorted(random_results, key=lambda x: x["time_ms"])
     tuning_results["random"] = {
         "results": random_results_sorted,
@@ -183,21 +188,38 @@ def main():
     print("STEP 5: Testing matmul with best tuned parameters")
     print(f"{'#'*70}")
     sycl_tuned = compile_and_test(best_config['BM'], best_config['BN'], 
-                                   best_config['BK'], best_config['TM'], best_config.get('TN', 1), "sycl", kernel="matmul", num_runs=DEFAULT_RUNS)
+                                   best_config['BK'], best_config['TM'], best_config.get('TN', 1), "sycl", kernel="matmul", num_runs=DEFAULT_BENCHMARK_RUNS)
     
     if sycl_tuned is None:
         print("\nTuned SYCL matmul test failed!")
         return
+
+    if sycl_tuned["time_ms"] >= sycl_default["time_ms"]:
+        print("\nTuned SYCL matmul is not faster than the default configuration; keeping default for comparison.")
+        sycl_matmul_final = sycl_default
+        sycl_matmul_final_source = "default"
+    else:
+        sycl_matmul_final = sycl_tuned
+        sycl_matmul_final_source = "tuned"
     
     print(f"\n{'#'*70}")
     print("Testing CUDA with best tuned matmul parameters")
     print(f"{'#'*70}")
     cuda_matmul_tuned = compile_and_test(best_config['BM'], best_config['BN'], 
-                                   best_config['BK'], best_config['TM'], best_config.get('TN', 1), "cuda", kernel="matmul", num_runs=DEFAULT_RUNS)
+                                   best_config['BK'], best_config['TM'], best_config.get('TN', 1), "cuda", kernel="matmul", num_runs=DEFAULT_BENCHMARK_RUNS)
     
     if cuda_matmul_tuned is None:
         print("\nTuned CUDA matmul test failed!")
-        cuda_matmul_tuned = {"time_ms": None, "throughput_gflops": None}
+        cuda_matmul_final = cuda_default
+        cuda_matmul_final_source = "default"
+    else:
+        if cuda_matmul_tuned["time_ms"] >= cuda_default["time_ms"]:
+            print("\nTuned CUDA matmul is not faster than the default configuration; keeping default for comparison.")
+            cuda_matmul_final = cuda_default
+            cuda_matmul_final_source = "default"
+        else:
+            cuda_matmul_final = cuda_matmul_tuned
+            cuda_matmul_final_source = "tuned"
     
     # Step 6: Autotune SYCL stencil kernel
     print(f"\n{'#'*70}")
@@ -211,7 +233,7 @@ def main():
     cuda_stencil_tuned = None
     
     print("6a) Running Bayesian Optimization for stencil...")
-    bayesian_stencil = bayesian_search(M, N, K, backend="sycl", num_runs=DEFAULT_RUNS, num_trials=DEFAULT_TRIALS, kernel="stencil")
+    bayesian_stencil = bayesian_search(M, N, K, backend="sycl", num_runs=DEFAULT_BENCHMARK_RUNS, num_trials=TRIALS_PER_RUN, kernel="stencil")
     bayesian_stencil_sorted = sorted(bayesian_stencil, key=lambda x: x["time_ms"])
     stencil_tuning_results["bayesian"] = {
         "results": bayesian_stencil_sorted,
@@ -219,7 +241,7 @@ def main():
     }
     
     print("\n6b) Running Random Search for stencil...")
-    random_stencil = random_search(M, N, K, backend="sycl", num_runs=DEFAULT_RUNS, num_samples=DEFAULT_TRIALS, kernel="stencil")
+    random_stencil = random_search(M, N, K, backend="sycl", num_runs=DEFAULT_BENCHMARK_RUNS, num_samples=TRIALS_PER_RUN, kernel="stencil")
     random_stencil_sorted = sorted(random_stencil, key=lambda x: x["time_ms"])
     stencil_tuning_results["random"] = {
         "results": random_stencil_sorted,
@@ -258,28 +280,46 @@ def main():
     if stencil_best_config:
         sycl_stencil_tuned = compile_and_test(stencil_best_config['BM'], stencil_best_config['BN'], 
                                        stencil_best_config['BK'], stencil_best_config['TM'], stencil_best_config.get('TN', 1), 
-                                       "sycl", kernel="stencil", num_runs=DEFAULT_RUNS)
+                                       "sycl", kernel="stencil", num_runs=DEFAULT_BENCHMARK_RUNS)
         
         if sycl_stencil_tuned is None:
             print("\nTuned SYCL stencil test failed!")
-            sycl_stencil_tuned = sycl_stencil
-        
+            sycl_stencil_final = sycl_stencil
+            sycl_stencil_final_source = "default"
+        elif sycl_stencil_tuned["time_ms"] >= sycl_stencil["time_ms"]:
+            print("\nTuned SYCL stencil is not faster than the default configuration; keeping default for comparison.")
+            sycl_stencil_final = sycl_stencil
+            sycl_stencil_final_source = "default"
+        else:
+            sycl_stencil_final = sycl_stencil_tuned
+            sycl_stencil_final_source = "tuned"
+
         print(f"\n{'#'*70}")
         print("Testing CUDA with best tuned stencil parameters")
         print(f"{'#'*70}")
         cuda_stencil_tuned = compile_and_test(stencil_best_config['BM'], stencil_best_config['BN'], 
                                        stencil_best_config['BK'], stencil_best_config['TM'], stencil_best_config.get('TN', 1), 
-                                       "cuda", kernel="stencil", num_runs=DEFAULT_RUNS)
+                                       "cuda", kernel="stencil", num_runs=DEFAULT_BENCHMARK_RUNS)
         
         if cuda_stencil_tuned is None:
             print("\nTuned CUDA stencil test failed!")
-            cuda_stencil_tuned = {"time_ms": None, "throughput_gflops": None}
+            cuda_stencil_final = cuda_stencil
+            cuda_stencil_final_source = "default"
+        elif cuda_stencil_tuned["time_ms"] >= cuda_stencil["time_ms"]:
+            print("\nTuned CUDA stencil is not faster than the default configuration; keeping default for comparison.")
+            cuda_stencil_final = cuda_stencil
+            cuda_stencil_final_source = "default"
+        else:
+            cuda_stencil_final = cuda_stencil_tuned
+            cuda_stencil_final_source = "tuned"
     else:
         print("Skipping stencil tuned tests (no valid tuning results)")
         sycl_stencil_tuned = sycl_stencil
         cuda_stencil_tuned = cuda_stencil
-    
-    # Step 8: Generate comparison graphs
+        sycl_stencil_final = sycl_stencil
+        sycl_stencil_final_source = "default"
+        cuda_stencil_final = cuda_stencil
+        cuda_stencil_final_source = "default"
     print(f"\n{'#'*70}")
     print("STEP 8: Generating comparison graphs")
     print(f"{'#'*70}")
@@ -287,21 +327,23 @@ def main():
     # Calculate improvements
     cuda_default_time = cuda_default["time_ms"]
     sycl_default_time = sycl_default["time_ms"]
-    sycl_matmul_tuned_time = sycl_tuned["time_ms"]
-    cuda_matmul_tuned_time = cuda_matmul_tuned["time_ms"] if cuda_matmul_tuned["time_ms"] else cuda_default_time
+    sycl_matmul_tuned_time = sycl_matmul_final["time_ms"]
+    cuda_matmul_tuned_time = cuda_matmul_final["time_ms"]
+    sycl_stencil_time = sycl_stencil_final["time_ms"]
+    cuda_stencil_time = cuda_stencil_final["time_ms"]
     
     print(f"\nFINAL PERFORMANCE SUMMARY:")
     print(f"{'='*70}")
     print(f"MATMUL KERNELS:")
     print(f"  CUDA (default):     {cuda_default_time:8.4f} ms  ({cuda_default['throughput_gflops']:6.2f} GFLOP/s)")
-    print(f"  CUDA (tuned):       {cuda_matmul_tuned_time:8.4f} ms  ({cuda_matmul_tuned['throughput_gflops']:6.2f} GFLOP/s)")
+    print(f"  CUDA (selected):    {cuda_matmul_tuned_time:8.4f} ms  ({cuda_matmul_final['throughput_gflops']:6.2f} GFLOP/s) [{cuda_matmul_final_source}]")
     print(f"  SYCL (default):     {sycl_default_time:8.4f} ms  ({sycl_default['throughput_gflops']:6.2f} GFLOP/s)")
-    print(f"  SYCL (tuned):       {sycl_matmul_tuned_time:8.4f} ms  ({sycl_tuned['throughput_gflops']:6.2f} GFLOP/s)")
+    print(f"  SYCL (selected):    {sycl_matmul_tuned_time:8.4f} ms  ({sycl_matmul_final['throughput_gflops']:6.2f} GFLOP/s) [{sycl_matmul_final_source}]")
     print(f"\nSTENCIL KERNELS:")
     print(f"  CUDA (default):     {cuda_stencil['time_ms']:8.4f} ms  ({cuda_stencil['throughput_gflops']:6.2f} GFLOP/s)")
-    print(f"  CUDA (tuned):       {cuda_stencil_tuned['time_ms']:8.4f} ms  ({cuda_stencil_tuned['throughput_gflops']:6.2f} GFLOP/s)")
+    print(f"  CUDA (selected):    {cuda_stencil_time:8.4f} ms  ({cuda_stencil_final['throughput_gflops']:6.2f} GFLOP/s) [{cuda_stencil_final_source}]")
     print(f"  SYCL (default):     {sycl_stencil['time_ms']:8.4f} ms  ({sycl_stencil['throughput_gflops']:6.2f} GFLOP/s)")
-    print(f"  SYCL (tuned):       {sycl_stencil_tuned['time_ms']:8.4f} ms  ({sycl_stencil_tuned['throughput_gflops']:6.2f} GFLOP/s)")
+    print(f"  SYCL (selected):    {sycl_stencil_time:8.4f} ms  ({sycl_stencil_final['throughput_gflops']:6.2f} GFLOP/s) [{sycl_stencil_final_source}]")
     print(f"{'='*70}\n")
     
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
@@ -420,9 +462,9 @@ def main():
     
     # Calculate improvements
     cuda_default_time = cuda_default["time_ms"]
-    cuda_matmul_tuned_time = cuda_matmul_tuned["time_ms"]
+    cuda_matmul_tuned_time = cuda_matmul_final["time_ms"]
     sycl_default_time = sycl_default["time_ms"]
-    sycl_matmul_tuned_time = sycl_tuned["time_ms"]
+    sycl_matmul_tuned_time = sycl_matmul_final["time_ms"]
     
     sycl_vs_cuda_default = (cuda_default_time - sycl_default_time) / cuda_default_time * 100
     sycl_matmul_tuned_vs_cuda_default = (cuda_default_time - sycl_matmul_tuned_time) / cuda_default_time * 100
@@ -434,8 +476,12 @@ def main():
         "matmul_kernels": {
             "cuda_default": cuda_default,
             "cuda_tuned": cuda_matmul_tuned,
+            "cuda_selected": cuda_matmul_final,
+            "cuda_selected_source": cuda_matmul_final_source,
             "sycl_default": sycl_default,
             "sycl_tuned": sycl_tuned,
+            "sycl_selected": sycl_matmul_final,
+            "sycl_selected_source": sycl_matmul_final_source,
             "best_config": best_config,
             "best_strategy": best_strategy,
             "tuning_strategies": {
@@ -450,16 +496,20 @@ def main():
             },
             "improvements": {
                 "sycl_default_vs_cuda_default_percent": sycl_vs_cuda_default,
-                "sycl_tuned_vs_cuda_default_percent": sycl_matmul_tuned_vs_cuda_default,
-                "cuda_tuned_vs_default_percent": cuda_matmul_tuned_vs_default,
+                "sycl_selected_vs_cuda_default_percent": sycl_matmul_tuned_vs_cuda_default,
+                "cuda_selected_vs_default_percent": cuda_matmul_tuned_vs_default,
                 "sycl_tuning_improvement_percent": (sycl_default_time - sycl_matmul_tuned_time) / sycl_default_time * 100,
             }
         },
         "stencil_kernels": {
             "cuda_default": cuda_stencil,
             "cuda_tuned": cuda_stencil_tuned,
+            "cuda_selected": cuda_stencil_final,
+            "cuda_selected_source": cuda_stencil_final_source,
             "sycl_default": sycl_stencil,
             "sycl_tuned": sycl_stencil_tuned,
+            "sycl_selected": sycl_stencil_final,
+            "sycl_selected_source": sycl_stencil_final_source,
             "best_config": stencil_best_config,
             "best_strategy": stencil_best_strategy if stencil_best_config else None,
             "tuning_strategies": {
