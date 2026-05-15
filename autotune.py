@@ -21,13 +21,6 @@ search_spaces = {
         "TM": [1, 2, 4],
         "TN": [1, 2, 4]
     },
-    "stencil": {
-        "BM": [32, 64, 128],
-        "BN": [32, 64, 128],
-        "BK": [1],
-        "TM": [1, 2, 4],
-        "TN": [1, 2, 4]
-    }
 }
 
 
@@ -72,7 +65,7 @@ def compile_config(bm, bn, bk, tm, tn=1, backend="sycl", kernel="matmul"):
     except Exception as e:
         return False
 
-def benchmark_config(M, N, K, bm, bn, bk, tm, tn=1, backend="sycl", kernel="matmul", num_runs=10, warmup_runs=1, seed=DEFAULT_SEED):
+def benchmark_config(M, N, K, bm, bn, bk, tm, tn=1, backend="sycl", kernel="matmul", num_runs=20, warmup_runs=3, seed=DEFAULT_SEED):
     try:
         if not compile_config(bm, bn, bk, tm, tn, backend=backend, kernel=kernel):
             return None, False
@@ -315,6 +308,7 @@ def main():
 
     if args.strategy == "random":
         results = random_search(
+            M, N, K,   
             backend=args.backend,
             num_runs=args.runs,
             num_samples=args.samples,
@@ -323,6 +317,7 @@ def main():
         )
     elif args.strategy == "bayesian":
         results = bayesian_search(
+            M, N, K,   
             backend=args.backend,
             num_runs=args.runs,
             num_trials=args.trials,
