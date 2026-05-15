@@ -58,7 +58,8 @@ Example search-space parameters (customize as needed):
 - `BM` (block M) ∈ {32, 64, 128}
 - `BN` (block N) ∈ {32, 64, 128}
 - `BK` (block K) ∈ {8, 16, 32}
-- `TM` (thread multiplier) ∈ {1, 2, 4}
+- `TM` (thread multiplier M) ∈ {1, 2, 4}
+- `TN` (thread multiplier N) ∈ {1, 2, 4}
 
 Constraints are enforced by the helper `is_valid_config` (e.g., threads-per-block limits).
 
@@ -67,6 +68,6 @@ Constraints are enforced by the helper `is_valid_config` (e.g., threads-per-bloc
 Use the Makefile to compile parameterized shared libraries (adjust flags for your toolchain):
 
 ```bash
-make kernel_matmul_sycl.so BM=32 BN=32 BK=32 TM=4
-make kernel_matmul_cuda.so BM=32 BN=32 BK=32 TM=4
+make kernel_matmul_sycl.so BM=32 BN=32 BK=32 TM=4 TN=4
+make kernel_matmul_cuda.so BM=32 BN=32 BK=32 TM=4 TN=4
 ```
