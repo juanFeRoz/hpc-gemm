@@ -155,7 +155,7 @@ def is_valid_config(bm, bn, bk, tm, tn=1, kernel="matmul"):
 
     if kernel == "matmul":
         shared_memory = (bm * bk + bk * bn) * 4
-        if shared_memory > 96 * 1024:
+        if shared_memory > 48 * 1024:
             return False, f"shared_mem={shared_memory/1024:.1f}KB > 96KB"
 
     return True, None

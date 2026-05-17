@@ -4,3 +4,6 @@
 .venv
 __pycache__
 *.png
+mixed-precision-hpc-tensor-cores-project
+logs
+results*

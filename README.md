@@ -23,7 +23,7 @@ This repository contains an autotuning and benchmarking framework for matrix-mat
 Install Python deps:
 
 ```bash
-python3 -m pip install optuna numpy matplotlib
+python3 -m pip install optuna numpy matplotlib scipy
 ```
 
 ## Quickstart
